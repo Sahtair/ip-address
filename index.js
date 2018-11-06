@@ -53,23 +53,30 @@ app.get('/status', async (req, res) => {
     const addressesCollection = db.collection('addresses');
 
     let ipApiResponse = '';
-
-    try {
-        ipApiResponse = await request(ipAddressApiUrl)
-    } catch(err) {
-        console.log(`Error making ip request: ${err}`);
-        return res.status(500).send(err);
-    }
-    
     let parsedIpApiResponse = {};
-    try {
-        parsedIpApiResponse = JSON.parse(ipApiResponse);
-    } catch(err) {
-        console.log(`Error parsing: ${err}`);
-        return res.status(500).send(err);
+    let ipAddress = '';
+    console.log(`Req headers: ${JSON.stringify(req.headers)}`)
+    if (req.headers.hasOwnProperty('x-forwarded-for')) {
+        const {'x-forwarded-for': forwardedRequestHeader} = req.headers;
+
+        [ipAddress] = forwardedRequestHeader.split(',');
+    } else {
+        try {
+            ipApiResponse = await request(ipAddressApiUrl)
+        } catch(err) {
+            console.log(`Error making ip request: ${err}`);
+            return res.status(500).send(err);
+        }
+        
+        try {
+            parsedIpApiResponse = JSON.parse(ipApiResponse);
+        } catch(err) {
+            console.log(`Error parsing: ${err}`);
+            return res.status(500).send(err);
+        }
+       
+        ipAddress = parsedIpApiResponse.ip
     }
-   
-    const ipAddress = parsedIpApiResponse.ip
 
     console.log(`Ip address: ${ipAddress}`);
     let dbResponse = {};
