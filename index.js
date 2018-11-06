@@ -6,6 +6,7 @@ const request = require('request-promise-native');
 const port = 3000;
 const dbName = 'blubblubTest';
 const ipAddressApiUrl = 'https://api.ipify.org?format=json';
+const secretToken = 'thisIsASuperSecretToken';
 
 let db = {};
 
@@ -36,7 +37,6 @@ app.get('/status', async (req, res) => {
     try {
         [,,token] = /^(Bearer\s)(.*)/.exec(bearerToken);
     } catch (err) {
-        console.log(`Error parsing token`);
         return res.status(500).send(`Error parsing token`);
     }
    
@@ -44,23 +44,43 @@ app.get('/status', async (req, res) => {
         return res.status(403).send(`Error no token provided`);
     }
 
+    if (token !== secretToken) {
+        return res.status(403).send(`Error invalid token provided`);
+    }
+
     console.log(`Token: ${token}`)
     
     const addressesCollection = db.collection('addresses');
 
-    const ipApiResponse = await request(ipAddressApiUrl)
-        .catch(err => {
-            console.log(`Error making ip request: ${err}`);
-            return res.status(500).send(err);
-        });
+    let ipApiResponse = '';
 
-    const parsedIpApiResponse = JSON.parse(ipApiResponse);
+    try {
+        ipApiResponse = await request(ipAddressApiUrl)
+    } catch(err) {
+        console.log(`Error making ip request: ${err}`);
+        return res.status(500).send(err);
+    }
+    
+    let parsedIpApiResponse = {};
+    try {
+        parsedIpApiResponse = JSON.parse(ipApiResponse);
+    } catch(err) {
+        console.log(`Error parsing: ${err}`);
+        return res.status(500).send(err);
+    }
+   
     const ipAddress = parsedIpApiResponse.ip
 
     console.log(`Ip address: ${ipAddress}`);
-    const dbResponse = await addressesCollection.findOne({
-        ipAddress
-    });
+    let dbResponse = {};
+
+    try {
+        dbResponse = await addressesCollection.findOne({
+            ipAddress
+        });
+    } catch(err) {
+        return res.status(500).send(err);
+    }
 
     console.log(`Found address: ${JSON.stringify(dbResponse)}`);
 
@@ -68,18 +88,21 @@ app.get('/status', async (req, res) => {
         console.log(`Found record: ${dbResponse}`);
         return res.send(dbResponse);
     }
-    await addressesCollection.insertOne({
-        ipAddress
-    }).catch(err => {
+    try {
+        await addressesCollection.insertOne({
+            ipAddress
+        })
+    } catch(err) {
         console.log(`Error inserting record: ${err}`);
         return res.status(500).send(err);
-    });
+    }
     res.send(ipAddress);
 });
 
 client.connect((err, database) => {
     if (err) {
         console.log(`Error connection to db: ${err}`);
+        throw new Error(err);
     }
     console.log("Connected correctly to server");
     db = database.db(dbName);
